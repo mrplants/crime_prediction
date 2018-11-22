@@ -1,0 +1,37 @@
+import numpy as np
+import tensorflow as tf
+import matplotlib.pyplot as plt
+from tensorflow.python.framework import ops
+import pandas as pd
+import math
+import json
+import os
+import time
+# For EC2
+# import boto3
+
+################################
+# NON-HYPERPARAMETER CONSTANTS #
+################################
+final_dataset_location = '/Volumes/GoogleDrive/My Drive/Crime Data/Final Folder/'
+playground_dataset_location = '/Volumes/GoogleDrive/My Drive/Crime Data/Composute Data/Sean Workspace/'
+trial_file_location = '/Users/sean/Documents/Education/Stanford/230/Project/Sean/Trials/'
+pickled_model_location = '/Users/sean/Documents/Education/Stanford/230/Project/Sean/Trials/Pickled Models/Trial %d.ckpt'
+trial_file_format = 'Trial %d.xlsx'
+epochs_between_prints = 100
+hyperparameter_file_columns = ['Epoch Cost',
+                               'Train Accuracy',
+                               'Dev Accuracy',
+                               'Duration',
+                               'Dev Set Proportion',
+                               'Test Set Proportion',
+                               'Train Set Proportion',
+                               'Learning Rate',
+                               'Goal Total Epochs',
+                               'Minibatch Size',
+                               'Hidden Units per Layer',
+                               'Hidden Layers',
+                               'Dataset',
+                               'Optimizer Name']
+
+
