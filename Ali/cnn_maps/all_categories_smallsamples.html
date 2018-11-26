@@ -3,22 +3,78 @@
 <head><title>Install Mapbox GL JS with a bundler | Mapbox</title>
     <script src='https://api.mapbox.com/mapbox-gl-js/v0.51.0/mapbox-gl.js'></script>
 <link href='https://api.mapbox.com/mapbox-gl-js/v0.51.0/mapbox-gl.css' rel='stylesheet' />
+<script src="https://ajax.aspnetcdn.com/ajax/jQuery/jquery-3.3.1.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/0.4.1/html2canvas.min.js"></script>
 
 </head>
 
 <body>
 
-        <div id='map' style='width: 800px; height: 800px;'></div>
+        <!-- <button onclick="screenshot();"> Screenshot </button> -->
+        <div id='map' style='width: 1000px; height: 800px;'></div>
+
+        <!-- <div class="container2">
+               <canvas id ="AliCanvas" width = "500px" height="300px"></canvas>
+        </div> -->
+        <!-- <div class="container">
+                <img width="75%" class="screen">
+        </div> -->
         <script>
+
+
+            //Step 1. Resize Map
+            setTimeout(function(){
+                    // var bbox = [[-91.686565684000001, 36.619446394999997], [-87.524529377999997, 42.022910332999999]];
+                    var bbox = [[-87.78428962556231, 41.886969610975285],[-87.55269324875721, 42.02475270852469]];
+                    console.log("starting fit function");
+                    map.fitBounds(bbox, {
+                    padding: {top: 0, bottom:0, left: 0, right: 0}
+                    });
+                    console.log("finishing fit function");
+            }, 4000)
+
+
+
+            //Step 2. Listen for Map Update from content Script 
+            var port = chrome.runtime.connect();
+
+            window.addEventListener("update_map", function(event) {
+            // We only accept messages from ourselves
+            //if (event.source != window)
+            //    return;
+
+            if (event.data.type && (event.data.type == "FROM_CONTENT_SCRIPT")) {
+                console.log("HTML Page script received: " + event.data.text);
+
+                //update the map here
+                // return data -> ready -> when done 
+
+               // port.postMessage(event.data.text);
+            }
+            }, false);
+
+
+
+
+            //Step 0. Load Map with Data
+
             mapboxgl.accessToken = 'pk.eyJ1IjoidHVmMjIxOTEiLCJhIjoiY2pvODB2d2FyMTFnMzNwbzE1NzZwYndtbSJ9.cjiP7-tGJwQ_QwqESNmqIw';
             var map = new mapboxgl.Map({
                 container: 'map',
                 style: 'mapbox://styles/mapbox/light-v9',
                 zoom: 12,
-                center: [ -87.623177, 41.881832] //long , lat
+                // center: [ -87.623177, 41.881832] //long , lat
+                center: [ -87.66849143715979, 41.95589839413799] //long , lat
+                
             });
+            window.ccc = map.getCanvas();
+            window.map = map;
 
-//map.style.sourceCaches.points._source._data
+
+        //- goes to the left for the longitude , + goes to the right
+        //- goes down for the latitude, + goes up
+        
+        // bbox = [[long,lat],[long,lat]]  , [bottom-left, top-right]
 
 //http://localhost:80
 //https://www.mapbox.com/mapbox-gl-js/style-spec/#sources
@@ -488,8 +544,8 @@ map.on('load', function () {
                 'paint': {
                         // make circles larger as the user zooms from z12 to z22
                         'circle-radius': {
-                            'base': 1.75,
-                            'stops': [[12, 2], [22, 180]]
+                            'base':1.75,
+                            'stops': [[12, 5], [22, 180]]
                         },
                         // // color circles by ethnicity, using a match expression
                         // // https://www.mapbox.com/mapbox-gl-js/style-spec/#expressions-match
