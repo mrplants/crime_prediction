@@ -1,0 +1,73 @@
+1. dates_data.npy 
+	
+	shape = (155928,4)
+	format = [month, day, year, timeOfDay ] # time of day is 1 of 24 values
+	
+2. x_buildings_.npy
+
+    shape = (10, 256, 256)
+	format = [
+			#layer 0  'UNINHABITABLE' or 'UNNHABITABLE'
+			#layer 1  'SOUND' , Stories
+			#layer 2  'SOUND' , units
+			#layer 3  'SOUND' , sq footage
+			#layer 4  'NEEDS MINOR REPAIR' , Stories
+			#layer 5  'NEEDS MINOR REPAIR' , units
+			#layer 6  'NEEDS MINOR REPAIR' , sq footage
+			#layer 7  'NEEDS MAJOR REPAIR' , Stories
+			#layer 8  'NEEDS MAJOR REPAIR' , units
+			#layer 9  'NEEDS MAJOR REPAIR' , sq footage
+	] 
+
+3. x_businesses_.npy
+
+	shape = (5,256,256)
+	format = [
+		#layer 0  'Food Service'
+		#layer 1  'Tobacco Sale'
+		#layer 2   'Alcohol Consumption'
+		#layer 3   'Package Store'
+		#layer 4   'Gas Station'
+	]
+
+4. x__Lentries_.npy
+
+	shape = (6496,8,256,256)
+
+	6496 days, each day has 8 layer image 
+
+	format = [
+		#layer 0 - Green Line
+		#layer 1 - Red Line
+		#layer 2 - Brown
+		#layer 3 - Purple
+		#layer 4 - Yellow
+		#layer 5 - Blue
+		#layer 6 - Orange
+		#layer 7 - pink
+	]
+
+5. x__socio_.npy
+	shape = (7,256,256)
+	format = [
+		#layer 0 'PERCENT OF HOUSING CROWDED'
+		#layer 1 'PERCENT HOUSEHOLDS BELOW POVERTY'
+		#layer 2 'PERCENT AGED 16+ UNEMPLOYED'
+		#layer 3 'PERCENT AGED 25+ WITHOUT HIGH SCHOOL DIPLOMA'
+		#layer 4 'PERCENT AGED UNDER 18 OR OVER 64'
+		#layer 5 'PER CAPITA INCOME '
+		#layer 6 'HARDSHIP INDEX'           # seven layers in total   to normalize -> normalize on that layer
+	]
+
+
+6. y__cn_.py  # the outputs, wasn't sure if we were going to break grid of 256x256 to 64x64x16 or 32x32x64 , etc. 
+			  # the outputs should be of format (35 by 1) or (36 by 1) => the extra variable being there for 0/1 if there is enough crime or not (think of the region over the water)
+
+	shape = (155928, 256,256)
+
+	155928 because we have 6497 days and 24 times of day => 6497 * 24 = 155928  # we have to shave off the last day to be equal to x__Lentries_ dataset
+
+	Okay, the format of 1 image is 256,256. The type of murder is actually at the coordinate. 
+	That is, on the image on pixel (1,3) if there was a category 4 crime, there will be a 4 there. On the 
+	same image, if there is a category 7 crime at (253,6), there will be a 7 there. I did this so that regardless
+	of the shape we choose 64 by 64 or 32 by 32, we can generate a count of each category and one hot encode it. 
