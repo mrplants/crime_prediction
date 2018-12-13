@@ -24,27 +24,32 @@ if USING_EC2:
 ###################
 np.random.seed(0)
 
-learning_rate = 0.009
-goal_total_epochs = 10000
-trial_number = 0
+learning_rate = 0.06
+goal_total_epochs = 1000
+trial_number = 13
 optimizer_name = 'Adam'
 regular_lambda = 0
-accuracy_eval_batch_size = 10
-max_num_crimes = 15
-minibatch_size = 10
-num_minibatches = 10
+accuracy_eval_batch_size = 1000
+max_num_crimes = 20
+minibatch_size = 5000
+num_minibatches = 5
 output_grid_width = 1 # x position
 output_grid_height = output_grid_width # y position
 num_anchor_boxes = 5
 input_image_width = 64
 input_image_height = 64
+test_set_size = 1000
+dev_set_size = 1000
+network_description = 'CONV(f=4,s=1,"same")x8 => MAX-POOL(f=8) => CONV(f=4,s=1,"same")x16 => MAX-POOL(f=4) => FC(100) => FC(100) => SOFT(NUM_CRIMES)'
+num_samples_for_normalization = 1000
 
 ################################
 # NON-HYPERPARAMETER CONSTANTS #
 ################################
 # For EC2
-bucket = 'cs230'
-s3 = boto3.client('s3') 
+if USING_EC2:
+    bucket = 'cs230'
+    s3 = boto3.client('s3')
 processed_dataset_paths_xlsx = '/Volumes/GoogleDrive/My Drive/Crime Data/Composite Data/Sean Workspace/Processed/%s.xlsx' 
 dataset_location = '/Volumes/GoogleDrive/My Drive/Crime Data/Composite Data/Sean Workspace/CNN Final/'
 trial_file_location = '/Users/sean/Documents/Education/Stanford/230/Project/Sean/Trials/'
@@ -74,10 +79,12 @@ hyperparameter_file_columns = [
     'Goal Total Epochs',
     'Minibatch Size',
     'Number of Minibatches',
-    'Hidden Units per Layer',
-    'Hidden Layers',
     'Optimizer Name',
-    'L2 Regularization Lambda']
+    'L2 Regularization Lambda',
+    'Test Set Size',
+    'Dev Set Size',
+    'Network Description',
+    'num_samples_for_normalization']
 FIRST_DATE = datetime(2001, 1, 1)
 LAST_DATE = datetime(2018, 1, 1)
 NUM_DAYS = (LAST_DATE-FIRST_DATE).days
@@ -90,14 +97,10 @@ X_HALF_WINDOW_PIXELS = int(X_WINDOW_MAX_PIXELS/2)
 Y_HALF_WINDOW_PIXELS = X_HALF_WINDOW_PIXELS
 NUM_STATIC_CHANNELS = 28
 STREET_CHANNEL, WATERWAY_CHANNEL, PARK_CHANNEL, FOREST_CHANNEL, SCHOOL_CHANNEL, LIBRARY_CHANNEL, BUILDING_CHANNELS,_,_,_,_,_,_,_,_,_, BUSINESS_CHANNELS,_,_,_,_, SOCIO_CHANNELS,_,_,_,_,_,_ = range(NUM_STATIC_CHANNELS)
-NUM_DYNAMIC_CHANNELS = 12
-MIN_TEMP_CHANNEL, MAX_TEMP_CHANNEL, PRECIPITATION_CHANNEL, LIFE_EXPECTANCY_CHANNEL, L_CHANNELS,_,_,_,_,_,_,_ = range(NUM_STATIC_CHANNELS,NUM_STATIC_CHANNELS+NUM_DYNAMIC_CHANNELS)
-YEAR_CHANNEL = NUM_STATIC_CHANNELS + NUM_DYNAMIC_CHANNELS
-MONTH_CHANNEL = YEAR_CHANNEL # + 17
-DAY_CHANNEL = MONTH_CHANNEL + 12
+NUM_DYNAMIC_CHANNELS = 9#12
+LIFE_EXPECTANCY_CHANNEL, L_CHANNELS,_,_,_,_,_,_,_ = range(NUM_STATIC_CHANNELS,NUM_STATIC_CHANNELS+NUM_DYNAMIC_CHANNELS)
 NUM_TIME_SLOTS = 12
-TIME_CHANNEL = DAY_CHANNEL + 31
-NUM_INPUT_CHANNELS = TIME_CHANNEL + NUM_TIME_SLOTS
+NUM_INPUT_CHANNELS = NUM_STATIC_CHANNELS+NUM_DYNAMIC_CHANNELS
 L_LINES = ['Green','Red','Brown','Purple','Yellow','Blue','Pink','Orange']
 CRIME_CATEGORIES = ['BATTERY', 'OTHER OFFENSE', 'ROBBERY', 'NARCOTICS', 'CRIMINAL DAMAGE',
                     'WEAPONS VIOLATION', 'THEFT', 'BURGLARY', 'MOTOR VEHICLE THEFT',
@@ -177,9 +180,9 @@ def normalize_input_data(layer_means, layer_variances):
     # Normalize the static channels
     normalized_static_channels = ((static_channels.transpose(1,2,0) - layer_means[:NUM_STATIC_CHANNELS]) / fixed_variances[:NUM_STATIC_CHANNELS]).transpose(2,0,1)
     # Normalize the weather data
-    normalized_min_temp_lookup = (min_temp_lookup - layer_means[MIN_TEMP_CHANNEL]) / fixed_variances[MIN_TEMP_CHANNEL]
-    normalized_max_temp_lookup = (max_temp_lookup - layer_means[MAX_TEMP_CHANNEL]) / fixed_variances[MAX_TEMP_CHANNEL]
-    normalized_precipitation_lookup = (precipitation_lookup - layer_means[PRECIPITATION_CHANNEL]) / fixed_variances[PRECIPITATION_CHANNEL]
+    normalized_min_temp_lookup = (min_temp_lookup - np.mean(min_temp_lookup)) / np.var(min_temp_lookup)
+    normalized_max_temp_lookup = (max_temp_lookup - np.mean(max_temp_lookup)) / np.var(max_temp_lookup)
+    normalized_precipitation_lookup = (precipitation_lookup - np.mean(precipitation_lookup)) / np.var(precipitation_lookup)
     # Normalize life expectancy
     normalized_life_expectancy_frame = (life_expectancy_frame - layer_means[LIFE_EXPECTANCY_CHANNEL]) / fixed_variances[LIFE_EXPECTANCY_CHANNEL]
     # Normalize L Entries
@@ -193,9 +196,6 @@ def normalize_input_data(layer_means, layer_variances):
                                args = (layer_means[L_CHANNELS:L_CHANNELS+len(L_LINES)], fixed_variances[L_CHANNELS:L_CHANNELS+len(L_LINES)]),
                                axis=1)
     # Calculate normalized date and time 'ones'
-    normalized_months = (1-layer_means[MONTH_CHANNEL:MONTH_CHANNEL+12]) / fixed_variances[MONTH_CHANNEL:MONTH_CHANNEL+12]
-    normalized_days = (1-layer_means[DAY_CHANNEL:DAY_CHANNEL+31]) / fixed_variances[DAY_CHANNEL:DAY_CHANNEL+31]
-    normalized_time_slots = (1-layer_means[TIME_CHANNEL:TIME_CHANNEL+NUM_TIME_SLOTS]) / fixed_variances[TIME_CHANNEL:TIME_CHANNEL+NUM_TIME_SLOTS]
     INPUT_DATA_NORMALIZED = True
     
 def choose_random_crime():
@@ -207,19 +207,20 @@ def choose_random_crime():
     random_crime_index = this_crime_index[4]
     return random_day, random_time_slot, random_category, random_crime_index
 
-def generate_random_mini_batch(batch_size, avoid_these_samples, layer_means = None, layer_variances = None):
+def generate_random_mini_batch(batch_size, avoid_these_samples, layer_means = None, layer_variances = None, normalize = True):
     # Generate samples
     return generate_mini_batch(sample_index_and_location(batch_size, avoid_these_samples),
                                layer_means = layer_means,
-                               layer_variances = layer_variances)
+                               layer_variances = layer_variances,
+                               normalize = normalize)
 
-def generate_mini_batch(samples, layer_means = None, layer_variances = None):
+def generate_mini_batch(samples, layer_means = None, layer_variances = None, normalize = True):
     # Normalize the input data if necessary
     if not INPUT_DATA_NORMALIZED:
         if layer_means is None or layer_variances is None:
             print('Usage Error: Please normalize the input data or pass in the layer means and variances to generate_mini_batch().')
             print('Generating mini-batch with non-normalized input data.')
-        else:
+        elif normalize:
             normalize_input_data(layer_means, layer_variances)
     day_index_samples = samples['day_index']
     batch_size = len(day_index_samples)
@@ -244,10 +245,6 @@ def generate_mini_batch(samples, layer_means = None, layer_variances = None):
     # Add static channels first (cannot vectorize here)
     for batch_index in range(batch_size):
         mini_batch_input[batch_index,:NUM_STATIC_CHANNELS] = normalized_static_channels[:,location_x_samples[batch_index]-X_HALF_WINDOW_PIXELS:location_x_samples[batch_index]+X_HALF_WINDOW_PIXELS, location_y_samples[batch_index]-Y_HALF_WINDOW_PIXELS:location_y_samples[batch_index]+Y_HALF_WINDOW_PIXELS]
-    # Weather channels
-    mini_batch_input[:,MIN_TEMP_CHANNEL] = np.repeat(np.repeat(normalized_min_temp_lookup[day_index_samples][:,np.newaxis], X_WINDOW_MAX_PIXELS, axis=1)[:,:,np.newaxis], Y_WINDOW_MAX_PIXELS, axis=2)
-    mini_batch_input[:,MAX_TEMP_CHANNEL] = np.repeat(np.repeat(normalized_max_temp_lookup[day_index_samples][:,np.newaxis], X_WINDOW_MAX_PIXELS, axis=1)[:,:,np.newaxis], Y_WINDOW_MAX_PIXELS, axis=2)
-    mini_batch_input[:,PRECIPITATION_CHANNEL] = np.repeat(np.repeat(normalized_precipitation_lookup[day_index_samples][:,np.newaxis], X_WINDOW_MAX_PIXELS, axis=1)[:,:,np.newaxis], Y_WINDOW_MAX_PIXELS, axis=2)
     # Life Expectancy Channel (cannot vectorize here)
     for batch_index in range(batch_size):
         mini_batch_input[batch_index,LIFE_EXPECTANCY_CHANNEL] = normalized_life_expectancy_frame[years_for_samples[batch_index]-FIRST_DATE.year, location_x_samples[batch_index]-X_HALF_WINDOW_PIXELS:location_x_samples[batch_index]+X_HALF_WINDOW_PIXELS, location_y_samples[batch_index]-Y_HALF_WINDOW_PIXELS:location_y_samples[batch_index]+Y_HALF_WINDOW_PIXELS]
@@ -266,11 +263,6 @@ def generate_mini_batch(samples, layer_means = None, layer_variances = None):
             station_y_samples = station_y_samples[y_filter]
             entries = entries[y_filter]
             mini_batch_input[batch_index, L_CHANNELS+line_index, station_x_samples, station_y_samples] = entries
-    # Date and Time Channels
-#     mini_batch_input[:, YEAR_CHANNEL + years_for_samples - FIRST_DATE.year] = np.ones((batch_size, X_WINDOW_MAX_PIXELS, Y_WINDOW_MAX_PIXELS))
-    mini_batch_input[np.arange(batch_size), MONTH_CHANNEL + months_for_samples] = np.repeat(np.repeat(normalized_months[months_for_samples, np.newaxis, np.newaxis], X_WINDOW_MAX_PIXELS, axis=1), Y_WINDOW_MAX_PIXELS, axis=2)
-    mini_batch_input[np.arange(batch_size), DAY_CHANNEL + days_for_samples] = np.repeat(np.repeat(normalized_days[days_for_samples, np.newaxis, np.newaxis], X_WINDOW_MAX_PIXELS, axis=1), Y_WINDOW_MAX_PIXELS, axis=2)
-    mini_batch_input[np.arange(batch_size), TIME_CHANNEL + time_slot_samples] = np.repeat(np.repeat(normalized_time_slots[time_slot_samples, np.newaxis, np.newaxis], X_WINDOW_MAX_PIXELS, axis=1), Y_WINDOW_MAX_PIXELS, axis=2)
     # Generate the corresponding output (Combine all categories for now)
     # Place the crimes on the map
     # - axis 0: day index
@@ -293,7 +285,21 @@ def generate_mini_batch(samples, layer_means = None, layer_variances = None):
             crimes_x = crimes_x[y_filter]
             crimes_y = crimes_y[y_filter]
             mini_batch_output[batch_index,crimes_x,crimes_y] = 1
-    return mini_batch_input, mini_batch_output
+    
+    months_for_samples = month_fast_lookup[day_index_samples]
+    one_hot_months = np.zeros((batch_size, 12))
+    one_hot_months[np.arange(batch_size),months_for_samples] = 1
+    
+    days_for_samples = day_fast_lookup[day_index_samples]
+    one_hot_days = np.zeros((batch_size, 31))
+    one_hot_days[np.arange(batch_size),days_for_samples] = 1
+    
+    one_hot_time_slots = np.zeros((batch_size, NUM_TIME_SLOTS))
+    one_hot_time_slots[np.arange(batch_size),time_slot_samples] = 1
+    
+    mini_batch_FC_inputs = np.concatenate([one_hot_months, one_hot_days, one_hot_time_slots, normalized_min_temp_lookup[day_index_samples,np.newaxis], normalized_max_temp_lookup[day_index_samples,np.newaxis], normalized_precipitation_lookup[day_index_samples,np.newaxis]], axis=1)
+    
+    return mini_batch_input, mini_batch_output, mini_batch_FC_inputs
 
 EMPTY_SAMPLE = {'day_index' :np.array([]),
                 'time_slot' :np.array([]),
@@ -370,9 +376,9 @@ def get_input_full_single(day_index, day, month, year, time_slot):
     input_data[L_CHANNELS+7, L_entries_compressed['Orange'][day_index][0], L_entries_compressed['Orange'][day_index][1]] = L_entries_compressed['Orange'][day_index][2]
     # Date and Time channels
 #     input_data[YEAR_CHANNEL + year - FIRST_DATE.year] = np.ones((X_MAX_PIXELS, Y_MAX_PIXELS))
-    input_data[MONTH_CHANNEL + month] = np.ones((X_MAX_PIXELS, Y_MAX_PIXELS))
-    input_data[DAY_CHANNEL + day] = np.ones((X_MAX_PIXELS, Y_MAX_PIXELS))
-    input_data[TIME_CHANNEL + time_slot] = np.ones((X_MAX_PIXELS, Y_MAX_PIXELS))
+#     input_data[MONTH_CHANNEL + month] = np.ones((X_MAX_PIXELS, Y_MAX_PIXELS))
+#     input_data[DAY_CHANNEL + day] = np.ones((X_MAX_PIXELS, Y_MAX_PIXELS))
+#     input_data[TIME_CHANNEL + time_slot] = np.ones((X_MAX_PIXELS, Y_MAX_PIXELS))
     return input_data
 
 def get_expected_output_full_single(day_index, time_slot, category):
@@ -389,6 +395,284 @@ def get_expected_output_full_single(day_index, time_slot, category):
     y_locations = crime_frames[day_index][time_slot][category][1][:last_crime]
     output_data[x_locations,y_locations] = 1
     return output_data
+
+def calculate_mean_and_variance(test, dev, sample_size=1000):
+    global INPUT_DATA_NORMALIZED
+    INPUT_DATA_NORMALIZED = False
+    # Generate a large number of inputs
+    inputs, outputs, _ = generate_random_mini_batch(sample_size,
+                                                    {'Test':test, 'Dev': dev},
+                                                    layer_means=np.zeros(NUM_INPUT_CHANNELS),
+                                                    layer_variances=np.ones(NUM_INPUT_CHANNELS),
+                                                    normalize=False)
+    # Calculate the mean and variance of each channel for normalizing all future mini-batches
+    layer_means = np.zeros(NUM_INPUT_CHANNELS)
+    layer_variances = np.ones(NUM_INPUT_CHANNELS)
+    for layer in range(NUM_INPUT_CHANNELS):
+        layer_means[layer] = np.mean(inputs[:,layer,:,:])
+        layer_variances[layer] = np.var(inputs[:,layer,:,:])
+    return layer_means, layer_variances
+
+def transform_to_CNN_data(inputs, outputs, fc_inputs):
+    m = inputs.shape[0]
+    x = np.transpose(inputs, (0,2,3,1))
+    y = np.sum(np.sum(outputs, axis=1), axis=1, dtype=np.int64)[:,np.newaxis]
+    return x, y, fc_inputs
+
+def create_placeholders():
+    """
+    Creates the placeholders for the tensorflow session.
+    
+    Arguments:
+    input_height -- scalar, height of an input image
+    input_width -- scalar, width of an input image
+    input_channels -- scalar, number of channels of the input
+    output_classes -- scalar, number of classes
+        
+    Returns:
+    X -- placeholder for the data input
+    Y -- placeholder for the input labels
+    """
+
+    X = tf.placeholder(tf.float32, shape=(None, input_image_height, input_image_width, NUM_INPUT_CHANNELS))
+    X_FC = tf.placeholder(tf.float32, shape=(None, 12 + 31 + NUM_TIME_SLOTS + 3))
+    Y = tf.placeholder(tf.float32, shape=(None, 1))
+#     Y = tf.placeholder(tf.float32, shape=(None, num_anchor_boxes * output_grid_height * output_grid_width * 3 + 1))
+    
+    return X, Y, X_FC
+
+def initialize_parameters():
+    """
+    Initializes weight parameters to build the CNN. The shapes are:
+                        W1 : [4, 4, NUM_INPUT_CHANNELS, 8]
+                        W2 : [2, 2, 8, 16]
+    Returns:
+    parameters -- a dictionary of tensors containing W1, W2
+    """
+            
+    W1 = tf.get_variable("W1", shape=(4,4,NUM_INPUT_CHANNELS,8), initializer=tf.contrib.layers.xavier_initializer(seed=0))
+    W2 = tf.get_variable("W2", shape=(2,2,8,16), initializer=tf.contrib.layers.xavier_initializer(seed=0))
+
+    W4 = tf.get_variable("W4", shape=(100, 64+(12+31+NUM_TIME_SLOTS+3)), initializer=tf.contrib.layers.xavier_initializer(seed=0))
+    b4 = tf.get_variable("b4", shape=(100, 1), initializer=tf.zeros_initializer())
+    W5 = tf.get_variable("W5", shape=(100, 100), initializer=tf.contrib.layers.xavier_initializer(seed=0))
+    b5 = tf.get_variable("b5", shape=(100, 1), initializer=tf.zeros_initializer())
+    W6 = tf.get_variable("W6", shape=(1, 100), initializer=tf.contrib.layers.xavier_initializer(seed=0))
+    b6 = tf.get_variable("b6", shape=(1, 1), initializer=tf.zeros_initializer())
+
+    parameters = {"W1": W1,
+                  "W2": W2,
+                  "W4":W4,
+                  "b4":b4,
+                  "W5":W5,
+                  "b5":b5,
+                  "W6":W6,
+                  "b6":b6}
+    
+    return parameters
+
+def forward_propagation(X, X_FC, parameters):
+    """
+    Implements the forward propagation for the model:
+    CONV2D -> RELU -> MAXPOOL -> CONV2D -> RELU -> MAXPOOL -> FLATTEN -> FULLYCONNECTED
+    
+    Arguments:
+    X -- input dataset placeholder, of shape (input size, number of examples)
+    parameters -- python dictionary containing your parameters "W1", "W2"
+                  the shapes are given in initialize_parameters
+
+    Returns:
+    Z3 -- the output of the last LINEAR unit
+    """
+    
+    # Retrieve the parameters from the dictionary "parameters" 
+    W1 = parameters['W1'] # CONV layer 1
+    W2 = parameters['W2'] # CONV layer 2
+    # layer 3 is a max-pool
+    W4 = parameters['W4'] # FC layer 1
+    b4 = parameters['b4']
+    W5 = parameters['W5'] # FC layer 2
+    b5 = parameters['b5']
+    W6 = parameters['W6'] # FC layer 3
+    b6 = parameters['b6']
+    
+    # CONV2D: stride of 1, padding 'SAME'
+    Z1 = tf.nn.conv2d(X,W1, strides = [1,1,1,1], padding = 'SAME')
+    # RELU
+    A1 = tf.nn.relu(Z1)
+    # MAXPOOL: window 8x8, sride 8, padding 'SAME'
+    P1 = tf.nn.max_pool(A1, ksize = [1,8,8,1], strides = [1,8,8,1], padding = 'SAME')
+    # CONV2D: filters W2, stride 1, padding 'SAME'
+    Z2 = tf.nn.conv2d(P1,W2, strides = [1,1,1,1], padding = 'SAME')
+    # RELU
+    A2 = tf.nn.relu(Z2)
+    # MAXPOOL: window 4x4, stride 4, padding 'SAME'
+    A3 = tf.nn.max_pool(A2, ksize = [1,4,4,1], strides = [1,4,4,1], padding = 'SAME')
+    # FLATTEN
+    A3 = tf.contrib.layers.flatten(A3)
+    # Now combine the date layers
+    A3 = tf.transpose(tf.concat([A3, X_FC], 1))
+    Z4 = W4@A3+b4
+    A4 = tf.nn.relu(Z4)
+    Z5 = W5@A4+b5
+    A5 = tf.nn.relu(Z5)
+    # FULLY-CONNECTED without non-linear activation function
+    Z6 = W6@Z5+b6
+#     A6 = tf.nn.relu(Z6)
+
+    return tf.transpose(Z6)
+
+def compute_cost(Y_hat, Y):
+    # Regression problem, so use mean squared error loss
+#     cost = tf.reduce_mean((Y-Y_hat)**2)
+    # Calculate the cost form the network prediction
+    cost = tf.losses.mean_squared_error(labels=Y,
+                                        predictions=Y_hat,
+                                        reduction=tf.losses.Reduction.SUM)
+
+
+    # NOTE: a relu is applied for regression.  For YOLO, we want partial relu, partial sigmoid
+    # First output value is a regression:  We will use it as the K (number of crimes)
+    # X, Y, Pc per anchor box per grid cell
+    # num_crimes = tf.math.round(tf.nn.relu(Y_hat[0]))
+    # cost_num_crimes = tf.reduce_mean((Y-num_crimes)**2)
+    # anchor_grid = tf.reshape(tf.nn.sigmoid(Y_hat[1:]), (output_grid_width, output_grid_height, num_anchor_boxes, 3))
+    # predicted_crime_locations = tf.where(anchor_grid[:,:,:,0] >= 0.5)
+    # last_crime_index = tf.where(Y[:,0]==-1)[0]
+    # crime_locations = Y[:,:last_crime_index]
+    
+    
+    return cost
+
+def compute_accuracy(Y_hat, Y):
+    # Regression problem on number of crimes.
+    # Round output to nearest, then compare.
+    return tf.reduce_mean(tf.cast(tf.equal(tf.math.round(Y_hat), Y), "float"))
+
+def restore_model(saver, session):
+    # Before epoch, check for trial # in trial files
+    if os.path.isfile(trial_file_location+trial_file_format % trial_number):
+        print('Model found.  Restoring parameters.')
+        # If trial exists:
+        # Restore model
+        saver.restore(session, pickled_model_location % trial_number)
+    else:
+        print('No saved model.  Using default parameter initialization.')
+
+def epoch_teardown(saver, session, train_cost, dev_cost, training_accuracy, dev_accuracy, duration):
+    trial_hyperparameters = pd.DataFrame(columns=hyperparameter_file_columns)
+    # After epoch, check for hyperparameter file
+    if os.path.isfile(trial_file_location+trial_file_format % trial_number):
+        trial_hyperparameters = pd.read_excel(trial_file_location+trial_file_format % trial_number)
+        # Save the model parameters
+        saver.save(session, pickled_model_location % trial_number)
+    # Save hyperparameters, epoch cost, and training & dev accuracies
+    trial_hyperparameters = trial_hyperparameters.append({
+        'Training Cost' : train_cost,
+        'Dev Cost' : dev_cost,
+        'Accuracy Evaluation Batch Size' : accuracy_eval_batch_size,
+        'Maximum Crimes per Window' :max_num_crimes,
+        'Number of Anchor Boxes per Window' : num_anchor_boxes,
+        'Input Image Width' : input_image_width,
+        'Input Image Height' : input_image_height,
+        'Output Grid Width' : output_grid_width,
+        'Output Grid Height' : output_grid_height,
+        'Train Accuracy' : training_accuracy,
+        'Dev Accuracy' : dev_accuracy,
+        'Duration' : duration,
+        'Learning Rate' : learning_rate,
+        'Goal Total Epochs' : goal_total_epochs,
+        'Minibatch Size' : minibatch_size,
+        'Number of Minibatches' : num_minibatches,
+        'Optimizer Name' : optimizer_name,
+        'L2 Regularization Lambda' : regular_lambda,
+        'Test Set Size' : test_set_size,
+        'Dev Set Size' : dev_set_size,
+        'Network Description' : network_description,
+        'Samples for Normalization' : num_samples_for_normalization
+    }, ignore_index=True)
+    # Save the edited/new hyperparameter trial file
+    writer = pd.ExcelWriter(trial_file_location+trial_file_format % trial_number)
+    trial_hyperparameters.to_excel(writer)
+    writer.save()
+
+def execute_model():
+    global optimizer_name
+    
+    # Generate the dev images for calculating dev accuracy during training
+    x_dev, y_dev, x_fc_dev = transform_to_CNN_data(*generate_mini_batch(dev))
+
+    ops.reset_default_graph()                         # to be able to rerun the model without overwriting tf variables
+    tf.set_random_seed(1)                             # to keep results consistent (tensorflow seed)
+    
+    # Create Placeholders of the correct shape
+    X, Y, X_FC = create_placeholders()
+    # Initialize parameters
+    parameters = initialize_parameters()
+    # Forward propagation: Build the forward propagation in the tensorflow graph
+    Y_hat = forward_propagation(X, X_FC, parameters)
+    
+    # Cost and Accuracies
+    cost = compute_cost(Y_hat, Y)
+    accuracy = compute_accuracy(Y_hat, Y)
+    
+    # Backpropagation: Define the tensorflow optimizer. Use an AdamOptimizer that minimizes the cost.
+    if optimizer_name == 'Adam':
+        optimizer = tf.train.AdamOptimizer(learning_rate = learning_rate).minimize(cost)
+    else:
+        optimizer_name = 'GD'
+        optimizer = tf.train.GradientDescentOptimizer(learning_rate = learning_rate).minimize(cost)
+
+    # Initialize all the variables globally
+    init = tf.global_variables_initializer()
+    saver = tf.train.Saver()
+
+    # Start the session to compute the tensorflow graph
+    with tf.Session(config=tf.ConfigProto(log_device_placement=True)) as session:
+        # Run the initialization
+        session.run(init)
+        # If the trial already exists, pick up where we left off
+        restore_model(saver, session)
+        # Do the training loop
+        print('Beginning Training')
+        x_train, y_train, x_fc_train = transform_to_CNN_data(*generate_random_mini_batch(accuracy_eval_batch_size, {'Test':test, 'Dev': dev}))
+        for epoch in range(goal_total_epochs):
+            start_time = time.time()
+            epoch_cost = 0.
+            for _ in range(num_minibatches):
+                x_batch_train, y_batch_train, x_fc_batch_train = transform_to_CNN_data(*generate_random_mini_batch(minibatch_size, {'Test':test, 'Dev': dev}))
+                _ , batch_cost = session.run([optimizer, cost], feed_dict={X: x_batch_train,
+                                                                           Y: y_batch_train,
+                                                                           X_FC: x_fc_batch_train})
+                epoch_cost += batch_cost / num_minibatches
+            elapsed_time = time.time() - start_time
+            train_accuracy = accuracy.eval({X: x_train,
+                                            Y: y_train,
+                                            X_FC: x_fc_train})
+            dev_accuracy = accuracy.eval({X: x_dev,
+                                          Y: y_dev,
+                                          X_FC: x_fc_dev})
+            # Display epoch results every so often
+            if epoch % epochs_between_prints == 0:
+                print('%i Epochs' % epoch)
+                print('\tCost: %f' % epoch_cost)
+                print('\tTrain Accuracy: %f' % train_accuracy)
+                print('\tDev Accuracy: %f' % dev_accuracy)
+            # Epoch over, tear down
+            dev_cost = cost.eval({X: x_dev, Y: y_dev, X_FC: x_fc_dev})
+            epoch_teardown(saver,
+                           session,
+                           epoch_cost,
+                           dev_cost,
+                           float(train_accuracy),
+                           float(dev_accuracy),
+                           elapsed_time)                
+
+        x_train, y_train, x_fc_train = transform_to_CNN_data(*generate_random_mini_batch(accuracy_eval_batch_size, {'Test':test, 'Dev': dev}))
+        # Calculate the accuracy on the train and dev sets
+        print('Reached Goal Number of Epochs.')
+        print('Final Train Accuracy: %f' % accuracy.eval({X: x_train, Y: y_train, X_FC: x_fc_train}))
+        print('Final Dev Accuracy: %f' % accuracy.eval({X: x_dev, Y: y_dev, X_FC: x_fc_train}))
 
 ##########################
 # CREATE STATIC CHANNELS #
@@ -560,10 +844,11 @@ normalized_life_expectancy_frame = life_expectancy_frame
 # Normalize L Entries
 normalized_L_entries_compressed = L_entries_compressed
 # Calculate normalized date and time 'ones'
-normalized_months = np.ones(12)
-normalized_days = np.ones(31)
-normalized_time_slots = np.ones(NUM_TIME_SLOTS)
+# normalized_months = np.ones(12)
+# normalized_days = np.ones(31)
+# normalized_time_slots = np.ones(NUM_TIME_SLOTS)
 INPUT_DATA_NORMALIZED = False
+print('Input data loaded.')
 
 #####################################
 # IMPORT PROCESSED (NONSTATIC) DATA #
@@ -580,264 +865,15 @@ month_fast_lookup = np.vectorize(lambda day_index: (FIRST_DATE+dtm.timedelta(day
 day_fast_lookup = np.vectorize(lambda day_index: (FIRST_DATE+dtm.timedelta(days=int(day_index))).day)(np.arange(NUM_DAYS))-1
 # Make it easy to randomly choose crimes
 crime_indices = np.argwhere(crime_frames != -1)
+print('Output data loaded.')
 
-def calculate_mean_and_variance(test, dev, sample_size=1000):
-    global INPUT_DATA_NORMALIZED
-    INPUT_DATA_NORMALIZED = False
-    # Generate a large number of inputs
-    inputs, outputs = generate_random_mini_batch(sample_size,
-                                                 {'Test':test, 'Dev': dev},
-                                                 layer_means=np.zeros(NUM_INPUT_CHANNELS),
-                                                 layer_variances=np.ones(NUM_INPUT_CHANNELS))
-    # Calculate the mean and variance of each channel for normalizing all future mini-batches
-    layer_means = np.zeros(NUM_INPUT_CHANNELS)
-    layer_variances = np.ones(NUM_INPUT_CHANNELS)
-    for layer in range(NUM_INPUT_CHANNELS):
-        layer_means[layer] = np.mean(inputs[:,layer,:,:])
-        layer_variances[layer] = np.var(inputs[:,layer,:,:])
-    return layer_means, layer_variances
-
-def transform_to_CNN_data(inputs, outputs):
-    m = inputs.shape[0]
-    x = np.transpose(inputs, (0,2,3,1))
-    y = np.zeros((m, MAX_NUM_CRIMES))
-    y[np.arange(m), np.sum(np.sum(outputs, axis=1), axis=1, dtype=np.int64)] = 1
-    return x, y
-
-def create_placeholders(input_width, input_height, input_channels, output_classes):
-    """
-    Creates the placeholders for the tensorflow session.
-    
-    Arguments:
-    input_height -- scalar, height of an input image
-    input_width -- scalar, width of an input image
-    input_channels -- scalar, number of channels of the input
-    output_classes -- scalar, number of classes
-        
-    Returns:
-    X -- placeholder for the data input
-    Y -- placeholder for the input labels
-    """
-
-    X = tf.placeholder(tf.float32, shape=(None, input_height, input_width, input_channels))
-    Y = tf.placeholder(tf.float32, shape=(None, output_classes))
-    
-    return X, Y
-
-def initialize_parameters():
-    """
-    Initializes weight parameters to build the CNN. The shapes are:
-                        W1 : [4, 4, NUM_INPUT_CHANNELS, 8]
-                        W2 : [2, 2, 8, 16]
-    Returns:
-    parameters -- a dictionary of tensors containing W1, W2
-    """
-            
-    W1 = tf.get_variable("W1", shape=(4,4,NUM_INPUT_CHANNELS,8), initializer=tf.contrib.layers.xavier_initializer(seed=0))
-    W2 = tf.get_variable("W2", shape=(2,2,8,16), initializer=tf.contrib.layers.xavier_initializer(seed=0))
-
-    parameters = {"W1": W1,
-                  "W2": W2}
-    
-    return parameters
-
-def forward_propagation(X, parameters):
-    """
-    Implements the forward propagation for the model:
-    CONV2D -> RELU -> MAXPOOL -> CONV2D -> RELU -> MAXPOOL -> FLATTEN -> FULLYCONNECTED
-    
-    Arguments:
-    X -- input dataset placeholder, of shape (input size, number of examples)
-    parameters -- python dictionary containing your parameters "W1", "W2"
-                  the shapes are given in initialize_parameters
-
-    Returns:
-    Z3 -- the output of the last LINEAR unit
-    """
-    
-    # Retrieve the parameters from the dictionary "parameters" 
-    W1 = parameters['W1']
-    W2 = parameters['W2']
-    
-    # CONV2D: stride of 1, padding 'SAME'
-    Z1 = tf.nn.conv2d(X,W1, strides = [1,1,1,1], padding = 'SAME')
-    # RELU
-    A1 = tf.nn.relu(Z1)
-    # MAXPOOL: window 8x8, sride 8, padding 'SAME'
-    P1 = tf.nn.max_pool(A1, ksize = [1,8,8,1], strides = [1,8,8,1], padding = 'SAME')
-    # CONV2D: filters W2, stride 1, padding 'SAME'
-    Z2 = tf.nn.conv2d(P1,W2, strides = [1,1,1,1], padding = 'SAME')
-    # RELU
-    A2 = tf.nn.relu(Z2)
-    # MAXPOOL: window 4x4, stride 4, padding 'SAME'
-    P2 = tf.nn.max_pool(A2, ksize = [1,4,4,1], strides = [1,4,4,1], padding = 'SAME')
-    # FLATTEN
-    P2 = tf.contrib.layers.flatten(P2)
-    # FULLY-CONNECTED without non-linear activation function (no softmax quite yet).
-    # MAX_NUM_CRIMES neurons in output layer.
-    Z3 = tf.contrib.layers.fully_connected(P2, MAX_NUM_CRIMES, activation_fn=None)
-
-    return Z3
-
-def compute_cost(Z3, Y):
-    """
-    Computes the cost
-    
-    Arguments:
-    Z3 -- output of forward propagation (output of the last LINEAR unit), of shape (MAX_NUM_CRIMES, number of examples)
-    Y -- "true" labels vector placeholder, same shape as Z3
-    
-    Returns:
-    cost - Tensor of the cost function
-    """
-    
-    cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(logits = Z3, labels = Y))
-    
-    return cost
-
-def restore_model(saver, session):
-    # Before epoch, check for trial # in trial files
-    if os.path.isfile(trial_file_location+trial_file_format % trial_number):
-        print('Model found.  Restoring parameters.')
-        # If trial exists:
-        # 1. roll back (cost, train & dev accuracy) to epoch with highest dev accuracy.
-        trial_hyperparameters = pd.read_excel(trial_file_location+trial_file_format % trial_number)
-        # Find highest dev accuracy
-        best_dev_index = np.argmax(trial_hyperparameters.loc[:,'Dev Accuracy'].values)
-        # Delete all rows after this epoch
-        trial_hyperparameters = trial_hyperparameters[:best_dev_index+1]
-        # 2. restore model for the best dev accuracy
-        saver.restore(session, pickled_model_location % trial_number)
-        # Save the edited/new hyperparameter trial file
-        writer = pd.ExcelWriter(trial_file_location+trial_file_format % trial_number)
-        trial_hyperparameters.to_excel(writer)
-        writer.save()
-        # Return the number of epochs already trained
-        return len(trial_hyperparameters)
-    else:
-        print('No saved model.  Using default parameter initialization.')
-        return 0
-
-def epoch_teardown(saver, session, train_cost, dev_cost, training_accuracy, dev_accuracy, duration):
-    trial_hyperparameters = pd.DataFrame(columns=hyperparameter_file_columns)
-    # After epoch, check for hyperparameter file
-    if os.path.isfile(trial_file_location+trial_file_format % trial_number):
-        trial_hyperparameters = pd.read_excel(trial_file_location+trial_file_format % trial_number)
-        # Compare dev accuracy with all other epochs
-        max_dev_accuracy = np.max(trial_hyperparameters['Dev Accuracy'].values)
-        if dev_accuracy > max_dev_accuracy:
-            # If greatest, save model
-            saver.save(session, pickled_model_location % trial_number)
-    # Save hyperparameters, epoch cost, and training & dev accuracies
-    trial_hyperparameters = trial_hyperparameters.append({
-        'Training Cost' : train_cost,
-        'Dev Cost' : dev_cost,
-        'Accuracy Evaluation Batch Size' : accuracy_eval_batch_size,
-        'Maximum Crimes per Window' :max_num_crimes,
-        'Number of Anchor Boxes per Window' : num_anchor_boxes,
-        'Input Image Width' : input_image_width,
-        'Input Image Height' : input_image_height,
-        'Output Grid Width' : output_grid_width,
-        'Output Grid Height' : output_grid_height,
-        'Train Accuracy' : training_accuracy,
-        'Dev Accuracy' : dev_accuracy,
-        'Duration' : duration,
-        'Learning Rate' : learning_rate,
-        'Goal Total Epochs' : goal_total_epochs,
-        'Minibatch Size' : minibatch_size,
-        'Number of Minibatches' : num_minibatches,
-        'Hidden Units per Layer' : hidden_units_per_layer,
-        'Hidden Layers' : num_hidden_layers,
-        'Optimizer Name' : optimizer_name,
-        'L2 Regularization Lambda' : regular_lambda
-    }, ignore_index=True)
-    # Save the edited/new hyperparameter trial file
-    writer = pd.ExcelWriter(trial_file_location+trial_file_format % trial_number)
-    trial_hyperparameters.to_excel(writer)
-    writer.save()
-
-def execute_model():
-    """
-    Implements a three-layer ConvNet in Tensorflow:
-    CONV2D -> RELU -> MAXPOOL -> CONV2D -> RELU -> MAXPOOL -> FLATTEN -> FULLYCONNECTED
-    """
-    
-    # Generate the dev images for calculating dev accuracy during training
-    x_dev, y_dev = transform_to_CNN_data(*generate_mini_batch(dev))
-    x_sample, y_sample = transform_to_CNN_data(*generate_random_mini_batch(1, {'Test':EMPTY_SAMPLE, 'Dev': EMPTY_SAMPLE}))
-
-    ops.reset_default_graph()                         # to be able to rerun the model without overwriting tf variables
-    tf.set_random_seed(1)                             # to keep results consistent (tensorflow seed)
-    _, n_H0, n_W0, n_C0 = x_sample.shape             
-    _, n_y = y_sample.shape                          
-    costs = []                                        # To keep track of the cost
-    # Create Placeholders of the correct shape
-    X, Y = create_placeholders(n_H0, n_W0, n_C0, n_y)
-    # Initialize parameters
-    parameters = initialize_parameters()
-    # Forward propagation: Build the forward propagation in the tensorflow graph
-    Z3 = forward_propagation(X, parameters)
-    # Cost function: Add cost function to tensorflow graph
-    cost = compute_cost(Z3, Y)
-    # Backpropagation: Define the tensorflow optimizer. Use an AdamOptimizer that minimizes the cost.
-    optimizer = tf.train.AdamOptimizer(learning_rate = learning_rate).minimize(cost)
-    # Initialize all the variables globally
-    init = tf.global_variables_initializer()
-    saver = tf.train.Saver()
-    
-    softmax_Z3 = tf.transpose(tf.nn.softmax(tf.transpose(Z3)))
-    # Formula for calculating set accuracy
-    accuracy = tf.reduce_mean(tf.cast(tf.equal(tf.argmax(Z3, 1), tf.argmax(Y, 1)), "float"))
-
-
-    # Start the session to compute the tensorflow graph
-    with tf.Session() as session:
-        # Run the initialization
-        session.run(init)
-        # If the trial already exists, pick up where we left off
-        starting_epoch = restore_model(saver, session)
-        # Do the training loop
-        for epoch in range(goal_total_epochs):
-            print('Beginning Training')
-            start_time = time.time()
-            epoch_cost = 0.
-            for _ in range(num_minibatches):
-                x_batch_train, y_batch_train = transform_to_CNN_data(*generate_random_mini_batch(minibatch_size, {'Test':test, 'Dev': dev}))
-                _ , batch_cost = session.run([optimizer, cost], feed_dict={X: x_batch_train, Y: y_batch_train})
-                epoch_cost += batch_cost / num_minibatches
-            elapsed_time = time.time() - start_time
-            x_train, y_train = transform_to_CNN_data(*generate_random_mini_batch(accuracy_eval_batch_size, {'Test':test, 'Dev': dev}))
-            train_accuracy = accuracy.eval({X: x_train, Y: y_train})
-            dev_accuracy = accuracy.eval({X: x_dev, Y: y_dev})
-            # Display epoch results every so often
-            if epoch % epochs_between_prints == 0:
-                print('%i Epochs' % epoch)
-                print('\tCost: %f' % epoch_cost)
-                print('\tTrain Accuracy: %f' % train_accuracy)
-                print('\tDev Accuracy: %f' % dev_accuracy)
-            # Epoch over, tear down
-            dev_cost = cost.eval({X: x_dev, Y: y_dev})
-            epoch_teardown(saver,
-                           session,
-                           epoch_cost,
-                           dev_cost,
-                           float(train_accuracy),
-                           float(dev_accuracy),
-                           elapsed_time)                
-
-        x_train, y_train = transform_to_CNN_data(*generate_random_mini_batch(accuracy_eval_batch_size, {'Test':test, 'Dev': dev}))
-        # Calculate the accuracy on the train and dev sets
-        print('Reached Goal Number of Epochs.')
-        print('Final Train Accuracy: %f' % accuracy.eval({X: x_train, Y: y_train}))
-        print('Final Dev Accuracy: %f' % accuracy.eval({X: x_dev, Y: y_dev}))
-        
 # Create the Test and Dev sets
-test = sample_index_and_location(500)
-dev = sample_index_and_location(500, {'Test':test, 'Dev':EMPTY_SAMPLE})
+test = sample_index_and_location(test_set_size)
+dev = sample_index_and_location(dev_set_size, {'Test':test, 'Dev':EMPTY_SAMPLE})
 print('Test and Dev samples generated.')
 # Ensure the data is not normalized
 normalize_input_data(np.zeros(NUM_INPUT_CHANNELS), np.ones(NUM_INPUT_CHANNELS))
-layer_means, layer_variances = calculate_mean_and_variance(test, dev, sample_size=1000)
+layer_means, layer_variances = calculate_mean_and_variance(test, dev, sample_size=num_samples_for_normalization)
 print('Mean and variance calculated.')
 normalize_input_data(layer_means, layer_variances)
 print('Input data normalized')
