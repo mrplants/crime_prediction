@@ -2,9 +2,8 @@
 
 *Authors: Sean Fitzgerald and Muhammad Ayub
 
-Take the time to read the [tutorials](https://cs230-stanford.github.io).
+We use Tensorflow for programming the networks. Take a look at some [tutorials] we found(https://github.com/easy-tensorflow/easy-tensorflow).
 
-Note: all scripts must be run in folder `tensorflow/vision`.
 
 ## Requirements to Run Code
 
@@ -58,7 +57,12 @@ please see the SampleData to view what the images look like. Most of the images 
 ```
 
 
-## Quickstart (~10 min)
+## Quickstart Sean (Volume of Crime Model)
+
+Please take a look at Sean's sub folder and go to Prediction Notebooks folder as well as Data Configure Notebooks folder. 
+
+## Quickstart Ali (Classification Model)
+
 
 1. __Build the dataset of size 64x64__: make sure you complete this step before training
 ```bash
@@ -120,10 +124,7 @@ Once you get something working for your dataset, feel free to edit any part of t
 
 ## Resources
 
-Introduction to the `tf.data` pipeline
-- [programmer's guide](https://www.tensorflow.org/programmers_guide/datasets)
-- [reading images](https://www.tensorflow.org/programmers_guide/datasets#decoding_image_data_and_resizing_it)
-
+Please contact babaali9966@gmail.com
 
 
 
