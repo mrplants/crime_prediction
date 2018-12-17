@@ -29,9 +29,9 @@ Ali's CNN classifies crime type. I.e. - given a 64x64xnum_channels image, predic
 
 ## Download the Datasets
 
-Please refer to Sean's section to download the dataset. 
+For crime volume prediction, please refer to Sean's section to download the dataset. 
 
-Please refer to Ali's section to download the dataset. Specifically the CNN data is hosted and available at: 
+For crime classification, please refer to Ali's section to download the dataset. Specifically the CNN data is hosted and available at: 
  https://drive.google.com/drive/folders/1LOyrqORS4Zszm4n62siat888IIgpx4rx?usp=sharing. 
 You will find a text file detailing how the data is structured. 
 
