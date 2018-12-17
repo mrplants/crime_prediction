@@ -93,11 +93,11 @@ sess.run(feed_dict = {X: inputData, Y: outputData}
 
 4. Pleas go to Ali/notebooks_models/ to see the code files. 
 
-Model 5a used one hot encoding. Learning rate was .008 , minibatch size was 200.
+Model 5a used one hot encoding. Learning rate was .008 , minibatch size was 200. In the best_results/model5 folder, the cpkt files start with 12_9
 
-Model 5b used 3 hot encoding. Learning rate was .008, minibatch size was 200. 
+Model 5b used 3 hot encoding. Learning rate was .008, minibatch size was 200. In the best_results/model5 folder, the cpkt files start with 12_12
 
-Model 5c used 3 hot encoding. Learning rate was .003, minibatch size was 400. 
+Model 5c used 3 hot encoding. Learning rate was .003, minibatch size was 400. In the best_results/model5 folder, the cpkt files start with 12_123
 
 Model 6 used 3 hot encoding with upsampling. Learning rate was .003, minibatch size was 400. 
 

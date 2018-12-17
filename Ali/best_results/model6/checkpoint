@@ -1,0 +1,6 @@
+model_checkpoint_path: "/home/muhammadayub/Desktop/CS230/models_saved/model6//model6_12_15__194_100.ckpt"
+all_model_checkpoint_paths: "/home/muhammadayub/Desktop/CS230/models_saved/model6//model6_12_15__194_20.ckpt"
+all_model_checkpoint_paths: "/home/muhammadayub/Desktop/CS230/models_saved/model6//model6_12_15__194_40.ckpt"
+all_model_checkpoint_paths: "/home/muhammadayub/Desktop/CS230/models_saved/model6//model6_12_15__194_60.ckpt"
+all_model_checkpoint_paths: "/home/muhammadayub/Desktop/CS230/models_saved/model6//model6_12_15__194_80.ckpt"
+all_model_checkpoint_paths: "/home/muhammadayub/Desktop/CS230/models_saved/model6//model6_12_15__194_100.ckpt"
