@@ -39,10 +39,13 @@ You will find a text file detailing how the data is structured.
 Final Folder Public Datasets/
     inputs_data/
         input_0_.npy
+		
 		input_1_.npy
-        ...
+        
+		...
     outputs_data/
         output_0_.npy
+		
 		output_1_.npy
         ...
 	CNN Dataset explained.txt
