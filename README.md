@@ -1,6 +1,10 @@
 # Fighting Crime with Deep Learning 
 
-*Authors: Sean Fitzgerald and Muhammad Ayub
+Authors: Sean Fitzgerald and Muhammad Ayub
+
+This readme file was templated from : https://github.com/cs230-stanford/cs230-code-examples/tree/master/tensorflow/vision
+We do use some of the words verbatim from that readme. 
+
 
 We use Tensorflow for programming the networks. Take a look at some [tutorials] we found(https://github.com/easy-tensorflow/easy-tensorflow).
 
