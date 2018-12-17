@@ -89,15 +89,15 @@ sess.run(feed_dict = {X: inputData, Y: outputData}
 
 ```
 
-4. 
+4. Pleas go to Ali/notebooks_models/ to see the code files. 
 
-Model 5a has
+Model 5a used one hot encoding. Learning rate was .008 , minibatch size was 200.
 
-Model 5b has
+Model 5b used 3 hot encoding. Learning rate was .008, minibatch size was 200. 
 
-Model 5c has
+Model 5c used 3 hot encoding. Learning rate was .003, minibatch size was 400. 
 
-Model 6 has 
+Model 6 used 3 hot encoding with upsampling. Learning rate was .003, minibatch size was 400. 
 
 
 ## Raw Data/ Resources
