@@ -57,14 +57,18 @@ please see the SampleData to view what the images look like. Most of the images 
 ```
 
 
-## Quickstart Sean (Volume of Crime Model)
+## Quickstart (Volume of Crime Model)
 
 Please take a look at Sean's sub folder and go to Prediction Notebooks folder as well as Data Configure Notebooks folder. 
 
-## Quickstart Ali (Classification Model)
+## Quickstart (Classification Model)
 
 
-1. __Build the dataset of size 64x64__: make sure you complete this step before training
+1. Download the dataset and get a feel for the dataset. Layers information can be found at the datasources website. 
+
+2.  
+
+
 ```bash
 python build_dataset.py --data_dir data/SIGNS\ dataset/ --output_dir data/64x64_SIGNS
 ```
@@ -103,31 +107,11 @@ python evaluate.py --data_dir data/64x64_SIGNS --model_dir experiments/base_mode
 ```
 
 
-## Guidelines for more advanced use
+## Raw Data/ Resources
 
-We recommend reading through `train.py` to get a high-level overview of the steps:
-- loading the hyperparameters for the experiment (the `params.json`)
-- getting the filenames / labels 
-- creating the input of our model by zipping the filenames and labels together (`input_fn(...)`), reading the images as well as performing batching and shuffling.
-- creating the model (=nodes / ops of the `tf.Graph()`) by calling `model_fn(...)`
-- training the model for a given number of epochs by calling `train_and_evaluate(...)`
+Please contact babaali9966@gmail.com for help
 
 
-Once you get the high-level idea, depending on your dataset, you might want to modify
-- `model/model_fn.py` to change the model
-- `model/input_fn.py` to change the way you read data
-- `train.py` and `evaluate.py` if somes changes in the model or input require changes here
-
-If you want to compute new metrics for which you can find a [tensorflow implementation](https://www.tensorflow.org/api_docs/python/tf/metrics), you can define it in the `model_fn.py` (add it to the `metrics` dictionnary). It will automatically be updated during the training and will be displayed at the end of each epoch.
-
-Once you get something working for your dataset, feel free to edit any part of the code to suit your own needs.
-
-## Resources
-
-Please contact babaali9966@gmail.com
-
-
-
-
-
-[SIGNS]: https://drive.google.com/file/d/1ufiR6hUKhXoAyiBNsySPkUwlvE_wfEHC/view?usp=sharing
+The raw data we used was from the data.gov website. 
+The Crime data is located at: https://data.cityofchicago.org/Public-Safety/Crimes-2001-to-present/ijzp-q8t2
+We joined in a bunch of other data like socioeconomic-indicators-in-chicago-2008-2012-36e55: https://catalog.data.gov/dataset/census-data-selected-socioeconomic-indicators-in-chicago-2008-2012-36e55
