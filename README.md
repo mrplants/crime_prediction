@@ -65,6 +65,9 @@ Please take a look at Sean's sub folder and go to Prediction Notebooks folder as
 
 
 1. Download the dataset and get a feel for the dataset. Layers information can be found at the datasources website. 
+Please take a look at Ali/cnn_data_engineering_related_new to understand how raw data in the Google Drive folder is turned into input and output images
+Please take a look at Ali/ 
+
 
 2.  
 
