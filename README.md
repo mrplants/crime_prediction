@@ -12,7 +12,7 @@ For running Sean's code the libraries needed are in cs230.yml.
  
 For running Ali's code the libraries are in requirements.txt. Ali used Windows 7 OS. 
 Also, Python 3.5 was used with a conda virtual environment. 
-With conda installed make a new environment and then do : 
+With conda installed make a new environment (example name is py35) and then do : 
 
 ```
 activate py35
@@ -39,14 +39,9 @@ You will find a text file detailing how the data is structured.
 Final Folder Public Datasets/
     inputs_data/
         input_0_.npy
-		
-		input_1_.npy
-        
 		...
     outputs_data/
         output_0_.npy
-		
-		output_1_.npy
         ...
 	CNN Dataset explained.txt
 ```
