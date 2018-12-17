@@ -66,48 +66,38 @@ Please take a look at Sean's sub folder and go to Prediction Notebooks folder as
 
 1. Download the dataset and get a feel for the dataset. Layers information can be found at the datasources website. 
 Please take a look at Ali/cnn_data_engineering_related_new to understand how raw data in the Google Drive folder is turned into input and output images
-Please take a look at Ali/ 
 
 
-2.  
+2.  The output data are still images so you can convert them to softmax vectors for classification or scalars for some sort of regression (you could add up all the non -1 values to get 
+total count and hence you can train networks for regression). Anyways, the general format is that you can read in the input/output data, preprocess it and then run the model. 
 
+3. The files that start with " CNN Run and Restore to Run " are the files that are for training the neural network. You can specify where and how often you want to save the .cpkt model files to disk.
+To train, you must have about 64 GB of RAM. If you don't you can simply read in each input/ouput.npy file , convert the output 64x64 to your desired format (a softmax vector or a scalar value for regression), 
+save these values to disk and then just load in one minibatch (one input, and one processed output file) before feeding into network. 
 
-```bash
-python build_dataset.py --data_dir data/SIGNS\ dataset/ --output_dir data/64x64_SIGNS
 ```
+outputMinibatch5 = np.load('/output_5_.npy')
+softmax_one_hot_encoded  = convertToOneHot(outputMinibatch5)
+#as an example, write the output_5_.npy file to disk converting it to output_5_onehot.npy
+np.save('/output_5_onehot.npy', softmax_one_hot_encoded)
 
-2. __Your first experiment__ We created a `base_model` directory for you under the `experiments` directory. It countains a file `params.json` which sets the parameters for the experiment. It looks like
-```json
-{
-    "learning_rate": 1e-3,
-    "batch_size": 32,
-    "num_epochs": 10,
-    ...
-}
-```
-For every new experiment, you will need to create a new directory under `experiments` with a similar `params.json` file.
+# then later on, just uste the 'output_5_onehot.npy' file to feed in a minibatch
+inputData = np.load('/input_5_.npy' , 'r')
+outputData = np.load('/output_5_onehot.npy', 'r')
+...
+sess.run(feed_dict = {X: inputData, Y: outputData}
 
-3. __Train__ your experiment. Simply run
-```
-python train.py --data_dir data/64x64_SIGNS --model_dir experiments/base_model
-```
-It will instantiate a model and train it on the training set following the parameters specified in `params.json`. It will also evaluate some metrics on the development set.
-
-4. __Your first hyperparameters search__ We created a new directory `learning_rate` in `experiments` for you. Now, run
-```
-python search_hyperparams.py --data_dir data/64x64_SIGNS --parent_dir experiments/learning_rate
-```
-It will train and evaluate a model with different values of learning rate defined in `search_hyperparams.py` and create a new directory for each experiment under `experiments/learning_rate/`.
-
-5. __Display the results__ of the hyperparameters search in a nice format
-```
-python synthesize_results.py --parent_dir experiments/learning_rate
 ```
 
-6. __Evaluation on the test set__ Once you've run many experiments and selected your best model and hyperparameters based on the performance on the development set, you can finally evaluate the performance of your model on the test set. Run
-```
-python evaluate.py --data_dir data/64x64_SIGNS --model_dir experiments/base_model
-```
+4. 
+
+Model 5a has
+
+Model 5b has
+
+Model 5c has
+
+Model 6 has 
 
 
 ## Raw Data/ Resources
