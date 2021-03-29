@@ -40,7 +40,7 @@ plotly==3.3.0rc1
 prompt-toolkit==1.0.15
 protobuf==3.6.0
 pycparser==2.19
-Pygments==2.2.0
+Pygments==2.7.4
 pygpu==0.7.6
 pyOpenSSL==18.0.0
 pyparsing==2.2.2
